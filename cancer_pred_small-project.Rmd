@@ -1,0 +1,177 @@
+---
+title: "Predictive Modeling and Analysis of Breast Cancer Diagnosis Using Machine Learning Techniques"
+output: html_document
+---
+
+# Introduction
+
+The `brca` dataset from the `dslabs` package contains information about breast cancer diagnosis biopsy samples for tumors that were determined to be either benign (not cancer) or malignant (cancer). This project aims to analyze the dataset to understand the features that differentiate benign from malignant tumors and build predictive models to classify the tumors.
+
+# Data Loading and Preparation
+
+```{r}
+# Set options and load libraries
+options(digits = 3)
+library(matrixStats)
+library(tidyverse)
+library(caret)
+library(dslabs)
+
+# Load data
+data(brca)
+```
+
+## Data Overview
+
+Let's take a quick look at the dimensions of the data and the proportion of malignant samples.
+
+```{r}
+# Dimensions of the feature matrix
+dim(brca$x)
+
+# Proportion of malignant samples
+mean(brca$y == "M")
+
+# Feature with the highest mean value
+which.max(colMeans(brca$x))
+
+# Feature with the lowest standard deviation
+which.min(colSds(brca$x))
+```
+
+# Data Preprocessing
+
+## Scaling the Data
+
+We center and scale the data to have zero mean and unit variance.
+
+```{r}
+# Centering and scaling the data
+x_centered <- sweep(brca$x, 2, colMeans(brca$x))
+x_scaled <- sweep(x_centered, 2, colSds(brca$x), FUN = "/")
+
+# Check standard deviation and median of the first scaled feature
+sd(x_scaled[,1])
+median(x_scaled[,1])
+```
+
+# Principal Component Analysis (PCA)
+
+## Performing PCA
+
+We perform PCA to reduce the dimensionality of the data and visualize the first two principal components.
+
+```{r}
+# Perform PCA
+pca <- prcomp(x_scaled)
+summary(pca)
+```
+
+## Visualizing PCA
+
+We visualize the first two principal components colored by the type of tumor (benign or malignant).
+
+```{r}
+# PCA plot
+data.frame(pca$x[,1:2], type = brca$y) %>%
+  ggplot(aes(PC1, PC2, color = type)) +
+  geom_point() +
+  labs(title = "PCA of Breast Cancer Data",
+       x = "Principal Component 1",
+       y = "Principal Component 2")+
+  theme(
+    plot.title = element_text(face="bold", size=16, hjust=0.5),
+    axis.title.x = element_text(size=14, vjust=-0.5),
+    axis.title.y = element_text(size=14, vjust=1.5),
+    axis.text.y = element_text(size=12),
+    legend.position="none",  # Show legend to identify lines
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(color = "black"),
+    axis.ticks = element_line(color = "black"),
+    panel.background = element_blank(),
+    panel.border = element_blank()
+  )
+```
+
+# Boxplot of Principal Components
+
+We create a boxplot of the first 10 principal components to see the distribution of values for benign and malignant samples.
+
+```{r}
+# Boxplot of first 10 principal components
+data.frame(type = brca$y, pca$x[,1:10]) %>%
+    gather(key = "PC", value = "value", -type) %>%
+    ggplot(aes(PC, value, fill = type)) +
+    geom_boxplot() +
+    labs(title = "Boxplot of First 10 Principal Components")+
+  theme(
+    plot.title = element_text(face="bold", size=16, hjust=0.5),
+    axis.title.x = element_text(size=14, vjust=-0.5),
+    axis.title.y = element_text(size=14, vjust=1.5),
+    axis.text.y = element_text(size=12),
+    legend.position="none",  # Show legend to identify lines
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(color = "black"),
+    axis.ticks = element_line(color = "black"),
+    panel.background = element_blank(),
+    panel.border = element_blank()
+  )
+```
+
+# Train-Test Split
+
+We split the data into training and test sets and ensure similar proportions of benign and malignant tumors in both sets.
+
+```{r}
+# Train-test split
+set.seed(1) 
+test_index <- createDataPartition(brca$y, times = 1, p = 0.2, list = FALSE)
+test_x <- x_scaled[test_index,]
+test_y <- brca$y[test_index]
+train_x <- x_scaled[-test_index,]
+train_y <- brca$y[-test_index]
+
+# Proportion of benign samples in training and test sets
+mean(train_y=="B")
+mean(test_y=="B")
+```
+
+# Logistic Regression Model
+
+We fit a logistic regression model using the training set and make predictions on the test set.
+
+```{r,warning=FALSE}
+# Fit logistic regression model
+set.seed(1)
+logistic_model <- train(train_x, train_y, method = "glm", family = "binomial")
+
+# Make predictions on the test set
+logistic_preds <- predict(logistic_model, test_x)
+confusionMatrix(logistic_preds, test_y)
+```
+
+# Model Evaluation
+
+Here is the confusion matrix of the logistic regression model:
+
+| Reference  | B  | M  |
+|------------|----|----|
+| Prediction |    |    |
+| B          | 68 | 3  |
+| M          | 4  | 40 |
+
+The accuracy of the model is 93.9%, with a 95% confidence interval (CI) of 87.9% to 97.5%. This high accuracy indicates that the model performs well in distinguishing between benign and malignant tumors. The kappa statistic is 0.871, showing a strong agreement between the predicted and actual classifications.
+
+- **Sensitivity (Recall)**: 0.944, which means the model correctly identifies 94.4% of the benign cases.
+- **Specificity**: 0.930, indicating that 93.0% of the malignant cases are correctly identified.
+- **Positive Predictive Value (Precision)**: 0.958, meaning that when the model predicts a tumor as benign, it is correct 95.8% of the time.
+- **Negative Predictive Value**: 0.909, so when the model predicts a tumor as malignant, it is correct 90.9% of the time.
+- **Balanced Accuracy**: 0.937, which is the average of sensitivity and specificity, giving a balanced measure of model performance.
+
+These metrics demonstrate that the logistic regression model is effective at predicting breast cancer diagnoses, with a good balance between identifying both benign and malignant tumors accurately.
+
+# Conclusion
+
+In this project, we explored the `brca` dataset, performed data preprocessing, applied PCA for visualization, and built a logistic regression model to classify breast cancer samples. The results demonstrate a comprehensive approach to handling and analyzing bioinformatics data using R. Future work could involve exploring more sophisticated models like random forests or support vector machines to improve classification performance.
